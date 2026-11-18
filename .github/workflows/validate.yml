@@ -51,7 +51,7 @@ jobs:
 
           print("NumPy:", numpy.__version__)
           print("jsonschema:", version("jsonschema"))
-          print("Dependency version verification passed.")
+          print("Dependency verification passed.")
           PY
 
       - name: Verify required repository files
@@ -71,6 +71,7 @@ jobs:
               "tests/test_contracts.py",
               "tests/test_return_engine.py",
               "tests/test_portfolio_engine.py",
+              "tests/test_depletion_tracking.py",
               "src/monte_carlo/return_engine.py",
               "src/monte_carlo/portfolio_engine.py",
           ]
@@ -82,14 +83,14 @@ jobs:
           ]
 
           if missing:
-              print("Missing required files:")
+              print("Missing required repository files:")
               for filename in missing:
                   print(f"  - {filename}")
               raise SystemExit(1)
 
           print(
               "Repository file check passed: "
-              f"{len(required_files)} files found."
+              f"{len(required_files)} files verified."
           )
           PY
 
@@ -106,19 +107,19 @@ jobs:
 
           if len(files) != 6:
               raise SystemExit(
-                  f"Expected 6 JSON files, found {len(files)}."
+                  f"Expected 6 JSON files; found {len(files)}."
               )
 
           for path in files:
               with path.open(
                   "r", encoding="utf-8"
-              ) as file:
-                  json.load(file)
+              ) as handle:
+                  json.load(handle)
 
               print(f"PASS: {path}")
 
           print(
-              "JSON syntax validation passed: "
+              f"JSON syntax validation passed: "
               f"{len(files)} files."
           )
           PY
@@ -130,11 +131,12 @@ jobs:
             src/monte_carlo/portfolio_engine.py \
             tests/test_contracts.py \
             tests/test_return_engine.py \
-            tests/test_portfolio_engine.py
+            tests/test_portfolio_engine.py \
+            tests/test_depletion_tracking.py
 
-          echo "Python syntax validation passed."
+          echo "Python syntax validation passed: 6 files."
 
-      - name: Run all 67 contract and numerical tests
+      - name: Run all 83 contract and numerical tests
         shell: bash
         run: |
           set -euo pipefail
@@ -160,12 +162,12 @@ jobs:
 
           if len(matches) != 1:
               raise SystemExit(
-                  "ERROR: Could not identify exactly one "
+                  "ERROR: Expected exactly one "
                   "unittest summary."
               )
 
           actual_count = int(matches[0])
-          expected_count = 67
+          expected_count = 83
 
           print(
               f"Discovered tests: {actual_count}"
@@ -187,12 +189,63 @@ jobs:
               )
 
           print(
-              "All 67 automated tests passed."
+              "All 83 automated tests passed."
+          )
+          PY
+
+      - name: Verify test category counts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          output = Path(
+              "test-results.log"
+          ).read_text(encoding="utf-8")
+
+          expected = {
+              "test_contracts": 23,
+              "test_return_engine": 20,
+              "test_portfolio_engine": 24,
+              "test_depletion_tracking": 16,
+          }
+
+          for module, expected_count in expected.items():
+              pattern = (
+                  r"^test_\w+ "
+                  r"\(" + re.escape(module)
+                  + r"\.[^)]+\)"
+              )
+
+              actual_count = len(
+                  re.findall(
+                      pattern,
+                      output,
+                      flags=re.MULTILINE,
+                  )
+              )
+
+              print(
+                  f"{module}: "
+                  f"{actual_count}/{expected_count}"
+              )
+
+              if actual_count != expected_count:
+                  raise SystemExit(
+                      f"ERROR: {module} expected "
+                      f"{expected_count} tests, "
+                      f"found {actual_count}."
+                  )
+
+          print(
+              "All four test category counts verified."
           )
           PY
 
       - name: Write validation summary
         if: success()
+        shell: bash
         run: |
           {
             echo "## Skill #8 - Gate 2 Validation"
@@ -204,35 +257,39 @@ jobs:
             echo "| Python | 3.11 |"
             echo "| NumPy | 2.2.6 |"
             echo "| jsonschema | 4.23.0 |"
-            echo "| Required repository files | 13 verified |"
+            echo "| Required repository files | 14 verified |"
             echo "| JSON syntax | 6 files passed |"
-            echo "| Python syntax | 5 files passed |"
+            echo "| Python syntax | 6 files passed |"
             echo "| Gate 1 contract tests | 23 passed |"
             echo "| Gate 2 return-engine tests | 20 passed |"
             echo "| Gate 2 portfolio-engine tests | 24 passed |"
-            echo "| **Total automated tests** | **67 passed** |"
+            echo "| Gate 2 depletion-tracking tests | 16 passed |"
+            echo "| **Total automated tests** | **83 passed** |"
             echo ""
             echo "### Validated capabilities"
             echo ""
             echo "- Versioned JSON contracts and fixtures"
-            echo "- Request and result semantic validation"
+            echo "- Portfolio and correlation semantic checks"
             echo "- Seeded return reproducibility"
             echo "- Correlated multivariate normal returns"
             echo "- Lognormal return conversion"
             echo "- Covariance and positive-semidefinite checks"
-            echo "- Deterministic return generation"
+            echo "- Deterministic reference return generation"
             echo "- Multi-asset portfolio balance evolution"
             echo "- Beginning- and end-of-period cash flows"
             echo "- Contribution and withdrawal accounting"
             echo "- Withdrawal shortfall tracking"
             echo "- Periodic fee calculations"
-            echo "- Asset allocation drift without rebalancing"
+            echo "- Asset weight drift without rebalancing"
             echo "- Portfolio depletion and recovery"
-            echo "- Path-by-path accounting reconciliation"
+            echo "- Intraperiod accounting-checkpoint depletion"
+            echo "- Closing-balance depletion tracking"
+            echo "- Path-specific depletion event aggregation"
+            echo "- Portfolio accounting reconciliation"
             echo ""
             echo "### Not yet validated"
             echo ""
-            echo "- Intraperiod depletion event tracking"
+            echo "- Continuous-time depletion between checkpoints"
             echo "- Scheduled and threshold rebalancing"
             echo "- Tax-aware account mechanics"
             echo "- Inflation-adjusted cash flows"
@@ -243,10 +300,12 @@ jobs:
             echo ""
             echo "### Acceptance boundary"
             echo ""
-            echo "This workflow validates the current "
-            echo "contract, return-generation, and portfolio "
-            echo "accounting foundations. It does not approve "
-            echo "the complete Monte Carlo application."
+            echo "This workflow validates contracts, "
+            echo "return generation, portfolio evolution, "
+            echo "and discrete depletion tracking."
+            echo ""
+            echo "It does not certify the complete "
+            echo "Monte Carlo simulation application."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test log on failure

@@ -1,0 +1,809 @@
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tolbert92/monte-carlo-simulation/blob/main/schemas/monte_carlo.result.v1.schema.json",
+  "title": "Monte Carlo Simulation Result v1",
+  "description": "Versioned result contract for Monte Carlo portfolio analytics, risk metrics, financial goals, scenarios, diagnostics, and agent handoffs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "request_id",
+    "status",
+    "started_at",
+    "completed_at",
+    "engine_version",
+    "model",
+    "seed",
+    "input_digest",
+    "assumption_summary",
+    "simulation_configuration",
+    "metrics",
+    "goals",
+    "scenarios",
+    "diagnostics",
+    "validation_findings",
+    "provenance",
+    "export_manifest"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "monte_carlo.result.v1"
+    },
+    "run_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "request_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "completed_with_warnings",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "engine_version": {
+      "$ref": "#/$defs/identifier"
+    },
+    "model": {
+      "$ref": "#/$defs/model"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "input_digest": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "assumption_summary": {
+      "$ref": "#/$defs/assumptionSummary"
+    },
+    "simulation_configuration": {
+      "$ref": "#/$defs/simulationConfiguration"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "goals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/goalResult"
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scenarioResult"
+      }
+    },
+    "diagnostics": {
+      "$ref": "#/$defs/diagnostics"
+    },
+    "validation_findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/validationFinding"
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "export_manifest": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exportEntry"
+      }
+    },
+    "time_series": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/timeSeriesPoint"
+      }
+    },
+    "sample_paths": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/samplePath"
+      }
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["error"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "completed",
+              "completed_with_warnings"
+            ]
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "required": [
+              "terminal_wealth",
+              "risk"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed_with_warnings"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "validation_findings": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "severity": {
+                  "const": "warning"
+                }
+              },
+              "required": ["severity"]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "model": {
+      "enum": [
+        "multivariate_normal",
+        "lognormal",
+        "student_t",
+        "historical_bootstrap",
+        "block_bootstrap",
+        "regime_switching"
+      ]
+    },
+    "probability": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nonnegativeNumber": {
+      "type": "number",
+      "minimum": 0
+    },
+    "numericMetric": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "probabilityMetric": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/probability"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "percentiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "p5",
+        "p25",
+        "p50",
+        "p75",
+        "p95"
+      ],
+      "properties": {
+        "p5": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "p25": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "p50": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "p75": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "p95": {
+          "$ref": "#/$defs/numericMetric"
+        }
+      }
+    },
+    "assumptionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_currency",
+        "initial_portfolio_value",
+        "return_convention",
+        "parameter_frequency",
+        "inflation_rate"
+      ],
+      "properties": {
+        "base_currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "initial_portfolio_value": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "return_convention": {
+          "enum": [
+            "arithmetic_simple",
+            "log"
+          ]
+        },
+        "parameter_frequency": {
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly",
+            "quarterly",
+            "annually"
+          ]
+        },
+        "inflation_rate": {
+          "type": "number",
+          "exclusiveMinimum": -1
+        },
+        "asset_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "assumption_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "simulationConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "horizon_years",
+        "time_step",
+        "requested_paths",
+        "completed_paths"
+      ],
+      "properties": {
+        "horizon_years": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "time_step": {
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly",
+            "quarterly",
+            "annually"
+          ]
+        },
+        "requested_paths": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "completed_paths": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runtime_seconds": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "random_generator": {
+          "type": "string"
+        },
+        "compute_environment": {
+          "type": "string"
+        }
+      }
+    },
+    "terminalWealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mean",
+        "median",
+        "standard_deviation",
+        "minimum",
+        "maximum",
+        "percentiles"
+      ],
+      "properties": {
+        "mean": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "median": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "standard_deviation": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "minimum": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "maximum": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "percentiles": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "inflation_adjusted_mean": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "inflation_adjusted_median": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "probability_of_gain": {
+          "$ref": "#/$defs/probabilityMetric"
+        },
+        "probability_of_loss": {
+          "$ref": "#/$defs/probabilityMetric"
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value_at_risk",
+        "conditional_value_at_risk",
+        "maximum_drawdown",
+        "depletion_probability"
+      ],
+      "properties": {
+        "value_at_risk": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "conditional_value_at_risk": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "var_confidence_level": {
+          "$ref": "#/$defs/probability"
+        },
+        "var_horizon": {
+          "type": "string"
+        },
+        "maximum_drawdown": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "maximum_drawdown_percentiles": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "depletion_probability": {
+          "$ref": "#/$defs/probabilityMetric"
+        },
+        "loss_threshold_probabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/lossThreshold"
+          }
+        }
+      }
+    },
+    "lossThreshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "threshold",
+        "probability"
+      ],
+      "properties": {
+        "threshold": {
+          "type": "number"
+        },
+        "probability": {
+          "$ref": "#/$defs/probability"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "terminal_wealth": {
+          "$ref": "#/$defs/terminalWealth"
+        },
+        "risk": {
+          "$ref": "#/$defs/risk"
+        },
+        "portfolio_longevity_years": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "withdrawal_sustainability_probability": {
+          "$ref": "#/$defs/probabilityMetric"
+        },
+        "sequence_of_returns_risk": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "additional_metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/numericMetric"
+          }
+        }
+      }
+    },
+    "goalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "goal_type",
+        "target_date",
+        "achievement_probability"
+      ],
+      "properties": {
+        "goal_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "goal_type": {
+          "enum": [
+            "target_wealth",
+            "minimum_balance",
+            "avoid_depletion",
+            "withdrawal_sustainability"
+          ]
+        },
+        "target_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "target_amount": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "achievement_probability": {
+          "$ref": "#/$defs/probabilityMetric"
+        },
+        "estimated_shortfall": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "scenarioResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "scenario_type",
+        "status"
+      ],
+      "properties": {
+        "scenario_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "scenario_type": {
+          "enum": [
+            "baseline",
+            "optimistic",
+            "pessimistic",
+            "historical",
+            "stress",
+            "custom"
+          ]
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "not_computed",
+            "failed"
+          ]
+        },
+        "scenario_weight": {
+          "$ref": "#/$defs/probability"
+        },
+        "conditional_mean_terminal_wealth": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "conditional_median_terminal_wealth": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "conditional_depletion_probability": {
+          "$ref": "#/$defs/probabilityMetric"
+        },
+        "conditional_goal_probabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/probabilityMetric"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "convergence_status",
+        "numerical_stability_status"
+      ],
+      "properties": {
+        "convergence_status": {
+          "enum": [
+            "passed",
+            "warning",
+            "failed",
+            "not_evaluated"
+          ]
+        },
+        "numerical_stability_status": {
+          "enum": [
+            "passed",
+            "warning",
+            "failed",
+            "not_evaluated"
+          ]
+        },
+        "sampling_error": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "effective_sample_size": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "accounting_reconciliation_error": {
+          "$ref": "#/$defs/nonnegativeNumber"
+        },
+        "calibration_observation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostic_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "validationFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "severity",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "finding_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "warning",
+            "information"
+          ]
+        },
+        "code": {
+          "$ref": "#/$defs/identifier"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field_path": {
+          "type": "string"
+        },
+        "recommended_action": {
+          "type": "string"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "source_id",
+        "model_version"
+      ],
+      "properties": {
+        "source_type": {
+          "enum": [
+            "standalone",
+            "agent",
+            "hybrid",
+            "reference_fixture"
+          ]
+        },
+        "source_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "model_version": {
+          "$ref": "#/$defs/identifier"
+        },
+        "calibration_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "calibration_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "source_references": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumption_overrides": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "exportEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "export_id",
+        "format",
+        "status"
+      ],
+      "properties": {
+        "export_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "format": {
+          "enum": [
+            "json",
+            "csv",
+            "html",
+            "pdf"
+          ]
+        },
+        "status": {
+          "enum": [
+            "available",
+            "not_generated",
+            "failed"
+          ]
+        },
+        "filename": {
+          "type": "string"
+        },
+        "content_digest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "timeSeriesPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period",
+        "percentiles"
+      ],
+      "properties": {
+        "period": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "mean": {
+          "$ref": "#/$defs/numericMetric"
+        },
+        "percentiles": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "depletion_probability": {
+          "$ref": "#/$defs/probabilityMetric"
+        }
+      }
+    },
+    "samplePath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path_id",
+        "values"
+      ],
+      "properties": {
+        "path_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/identifier"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

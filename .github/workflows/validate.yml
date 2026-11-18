@@ -1,5 +1,5 @@
 
-name: Skill 8 - Monte Carlo Contract Validation
+name: Skill 8 - Monte Carlo Contract and Engine Validation
 
 on:
   push:
@@ -14,22 +14,24 @@ permissions:
   contents: read
 
 jobs:
-  contract-validation:
-    name: Python 3.11 - Contract and Semantic Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  monte-carlo-validation:
+    name: Python 3.11 - Contract and Numerical Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: Display Python version
-        run: python --version
+        run: |
+          python --version
+          python -m pip --version
 
       - name: Install dependencies
         run: |
@@ -37,6 +39,21 @@ jobs:
           python -m pip install \
             jsonschema==4.23.0 \
             numpy==2.2.6
+
+      - name: Verify installed dependency versions
+        run: |
+          python - <<'PY'
+          import numpy
+          import jsonschema
+          from importlib.metadata import version
+
+          assert numpy.__version__ == "2.2.6"
+          assert version("jsonschema") == "4.23.0"
+
+          print("NumPy:", numpy.__version__)
+          print("jsonschema:", version("jsonschema"))
+          print("Dependency version verification passed.")
+          PY
 
       - name: Verify required repository files
         run: |
@@ -53,6 +70,8 @@ jobs:
               "examples/invalid-correlation-request.json",
               "examples/valid-baseline-result.json",
               "tests/test_contracts.py",
+              "tests/test_return_engine.py",
+              "src/monte_carlo/return_engine.py",
           ]
 
           missing = [
@@ -68,7 +87,7 @@ jobs:
               raise SystemExit(1)
 
           print(
-              f"Repository file check passed: "
+              "Repository file check passed: "
               f"{len(required_files)} files found."
           )
           PY
@@ -98,31 +117,86 @@ jobs:
               print(f"PASS: {path}")
 
           print(
-              f"JSON syntax validation passed: "
+              "JSON syntax validation passed: "
               f"{len(files)} files."
           )
           PY
 
-      - name: Run contract and semantic tests
+      - name: Validate Python syntax
         run: |
+          python -m py_compile \
+            src/monte_carlo/return_engine.py \
+            tests/test_contracts.py \
+            tests/test_return_engine.py
+
+          echo "Python syntax validation passed."
+
+      - name: Run all contract and numerical tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
           python -m unittest discover \
             -s tests \
-            -p "test_contracts.py" \
-            -v
+            -p "test_*.py" \
+            -v 2>&1 | tee test-results.log
 
-      - name: Write workflow summary
+          if ! grep -Eq "Ran 43 tests? in " test-results.log; then
+            echo "ERROR: Expected exactly 43 discovered tests."
+            exit 1
+          fi
+
+          if ! grep -qx "OK" test-results.log; then
+            echo "ERROR: Test suite did not report OK."
+            exit 1
+          fi
+
+          echo "All 43 automated tests passed."
+
+      - name: Write validation summary
         if: success()
         run: |
           {
-            echo "## Skill #8 - Gate 1 Validation"
+            echo "## Skill #8 - Gate 2 Validation"
             echo ""
             echo "**Status:** PASSED"
             echo ""
-            echo "- Python: 3.11"
-            echo "- Required repository files: 9"
-            echo "- JSON files checked: 6"
-            echo "- Contract and semantic tests: 23"
+            echo "| Validation | Result |"
+            echo "|---|---|"
+            echo "| Python | 3.11 |"
+            echo "| NumPy | 2.2.6 |"
+            echo "| jsonschema | 4.23.0 |"
+            echo "| Required repository files | 11 verified |"
+            echo "| JSON syntax | 6 files passed |"
+            echo "| Python syntax | 3 files passed |"
+            echo "| Gate 1 contract tests | 23 |"
+            echo "| Gate 2 numerical tests | 20 |"
+            echo "| **Total automated tests** | **43 passed** |"
             echo ""
-            echo "This workflow verifies contracts and fixtures."
-            echo "It does not verify the Monte Carlo engine."
+            echo "### Scope"
+            echo ""
+            echo "Validated:"
+            echo "- Versioned JSON contracts and fixtures"
+            echo "- Portfolio and correlation semantic checks"
+            echo "- Seeded return reproducibility"
+            echo "- Correlated multivariate normal returns"
+            echo "- Lognormal return conversion"
+            echo "- Covariance and positive-semidefinite checks"
+            echo "- Deterministic reference return generation"
+            echo ""
+            echo "Not yet validated:"
+            echo "- Portfolio balance evolution"
+            echo "- Contributions, withdrawals, and rebalancing"
+            echo "- Full Monte Carlo financial risk reporting"
+            echo "- Additional return models"
+            echo "- Hosted professor acceptance testing"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monte-carlo-test-failure-log
+          path: test-results.log
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,90 @@
+
+{
+  "schema_version": "monte_carlo.request.v1",
+  "request_id": "REQ-DETERMINISTIC-001",
+  "as_of_date": "2026-11-17",
+  "base_currency": "USD",
+  "input_mode": "standalone",
+  "portfolio": {
+    "portfolio_id": "PORT-DETERMINISTIC-001",
+    "portfolio_name": "Zero Return Reference Portfolio",
+    "assets": [
+      {
+        "asset_id": "CASH",
+        "asset_class": "cash",
+        "initial_value": 10000,
+        "target_weight": 1,
+        "account_type": "taxable"
+      }
+    ],
+    "allow_borrowing": false
+  },
+  "market_assumptions": {
+    "return_convention": "arithmetic_simple",
+    "parameter_frequency": "annually",
+    "expected_returns": {
+      "CASH": 0
+    },
+    "volatilities": {
+      "CASH": 0
+    },
+    "correlation_matrix": [
+      [1]
+    ],
+    "inflation_rate": 0,
+    "inflation_frequency": "annually",
+    "provenance": {
+      "source_type": "reference_fixture",
+      "source_id": "ZERO-RETURN-REFERENCE-V1"
+    }
+  },
+  "simulation": {
+    "model": "multivariate_normal",
+    "horizon_years": 5,
+    "time_step": "annually",
+    "number_of_paths": 100,
+    "random_seed": 12345,
+    "output_options": {
+      "include_percentile_paths": true,
+      "include_sample_paths": true,
+      "maximum_export_paths": 5
+    }
+  },
+  "cash_flows": [
+    {
+      "cash_flow_id": "ANNUAL-1000",
+      "flow_type": "contribution",
+      "amount": 1000,
+      "start_date": "2027-11-17",
+      "end_date": "2031-11-17",
+      "frequency": "annually",
+      "timing": "end_of_period",
+      "inflation_adjusted": false
+    }
+  ],
+  "rebalancing": {
+    "policy": "none"
+  },
+  "goals": [
+    {
+      "goal_id": "GOAL-15000",
+      "goal_type": "target_wealth",
+      "target_date": "2031-11-17",
+      "target_amount": 15000,
+      "inflation_adjusted": false
+    }
+  ],
+  "scenarios": [],
+  "governance": {
+    "model_version": "1.0.0",
+    "assumption_sources": [
+      {
+        "source_type": "reference_fixture",
+        "source_id": "ZERO-RETURN-REFERENCE-V1"
+      }
+    ],
+    "user_overrides": [],
+    "allow_model_fallback": false,
+    "allow_covariance_repair": false
+  }
+}

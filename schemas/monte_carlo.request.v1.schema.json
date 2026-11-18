@@ -1,0 +1,818 @@
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tolbert92/monte-carlo-simulation/blob/main/schemas/monte_carlo.request.v1.schema.json",
+  "title": "Monte Carlo Simulation Request v1",
+  "description": "Versioned input contract for standalone and agent-driven Monte Carlo portfolio simulation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "as_of_date",
+    "base_currency",
+    "input_mode",
+    "portfolio",
+    "market_assumptions",
+    "simulation",
+    "goals",
+    "governance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "monte_carlo.request.v1"
+    },
+    "request_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "as_of_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "base_currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "input_mode": {
+      "enum": ["standalone", "agent", "hybrid"]
+    },
+    "portfolio": {
+      "$ref": "#/$defs/portfolio"
+    },
+    "market_assumptions": {
+      "$ref": "#/$defs/marketAssumptions"
+    },
+    "simulation": {
+      "$ref": "#/$defs/simulation"
+    },
+    "cash_flows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cashFlow"
+      },
+      "default": []
+    },
+    "rebalancing": {
+      "$ref": "#/$defs/rebalancing"
+    },
+    "goals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/goal"
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scenario"
+      },
+      "default": []
+    },
+    "governance": {
+      "$ref": "#/$defs/governance"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "nonnegativeAmount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "rate": {
+      "type": "number",
+      "minimum": -1
+    },
+    "frequency": {
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "quarterly",
+        "annually"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "source_id"],
+      "properties": {
+        "source_type": {
+          "enum": [
+            "user",
+            "historical_data",
+            "agent",
+            "model",
+            "reference_fixture"
+          ]
+        },
+        "source_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "calibration_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "calibration_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "asset_class",
+        "initial_value",
+        "target_weight"
+      ],
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "asset_class": {
+          "enum": [
+            "equity",
+            "fixed_income",
+            "cash",
+            "real_estate",
+            "commodity",
+            "alternative",
+            "other"
+          ]
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "initial_value": {
+          "$ref": "#/$defs/nonnegativeAmount"
+        },
+        "target_weight": {
+          "$ref": "#/$defs/weight"
+        },
+        "account_type": {
+          "enum": [
+            "taxable",
+            "tax_deferred",
+            "tax_free",
+            "other"
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "portfolio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["portfolio_id", "assets"],
+      "properties": {
+        "portfolio_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "portfolio_name": {
+          "type": "string"
+        },
+        "assets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/asset"
+          }
+        },
+        "allow_borrowing": {
+          "type": "boolean",
+          "default": false
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "marketAssumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "return_convention",
+        "parameter_frequency",
+        "expected_returns",
+        "volatilities",
+        "correlation_matrix",
+        "inflation_rate",
+        "provenance"
+      ],
+      "properties": {
+        "return_convention": {
+          "enum": [
+            "arithmetic_simple",
+            "log"
+          ]
+        },
+        "parameter_frequency": {
+          "$ref": "#/$defs/frequency"
+        },
+        "expected_returns": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/rate"
+          }
+        },
+        "volatilities": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/nonnegativeAmount"
+          }
+        },
+        "correlation_matrix": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            }
+          }
+        },
+        "inflation_rate": {
+          "type": "number",
+          "exclusiveMinimum": -1
+        },
+        "inflation_frequency": {
+          "$ref": "#/$defs/frequency"
+        },
+        "historical_observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/historicalObservation"
+          }
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "historicalObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "returns"],
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "returns": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/rate"
+          }
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "horizon_years",
+        "time_step",
+        "number_of_paths",
+        "random_seed"
+      ],
+      "properties": {
+        "model": {
+          "enum": [
+            "multivariate_normal",
+            "lognormal",
+            "student_t",
+            "historical_bootstrap",
+            "block_bootstrap",
+            "regime_switching"
+          ]
+        },
+        "horizon_years": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "time_step": {
+          "$ref": "#/$defs/frequency"
+        },
+        "number_of_paths": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "random_seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "model_parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "degrees_of_freedom": {
+              "type": "number",
+              "exclusiveMinimum": 2
+            },
+            "block_length": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "regime_transition_matrix": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "$ref": "#/$defs/weight"
+                }
+              }
+            },
+            "regimes": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/regime"
+              }
+            }
+          }
+        },
+        "output_options": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "include_percentile_paths": {
+              "type": "boolean",
+              "default": true
+            },
+            "include_sample_paths": {
+              "type": "boolean",
+              "default": false
+            },
+            "maximum_export_paths": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
+        },
+        "resource_limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maximum_runtime_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
+            },
+            "maximum_memory_mb": {
+              "type": "integer",
+              "minimum": 64
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "model": {
+                "const": "student_t"
+              }
+            },
+            "required": ["model"]
+          },
+          "then": {
+            "required": ["model_parameters"],
+            "properties": {
+              "model_parameters": {
+                "required": ["degrees_of_freedom"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "model": {
+                "const": "block_bootstrap"
+              }
+            },
+            "required": ["model"]
+          },
+          "then": {
+            "required": ["model_parameters"],
+            "properties": {
+              "model_parameters": {
+                "required": ["block_length"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "model": {
+                "const": "regime_switching"
+              }
+            },
+            "required": ["model"]
+          },
+          "then": {
+            "required": ["model_parameters"],
+            "properties": {
+              "model_parameters": {
+                "required": [
+                  "regimes",
+                  "regime_transition_matrix"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "regime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regime_id",
+        "expected_returns",
+        "volatilities",
+        "correlation_matrix"
+      ],
+      "properties": {
+        "regime_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "expected_returns": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/rate"
+          }
+        },
+        "volatilities": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/nonnegativeAmount"
+          }
+        },
+        "correlation_matrix": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "cashFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cash_flow_id",
+        "flow_type",
+        "amount",
+        "start_date",
+        "frequency"
+      ],
+      "properties": {
+        "cash_flow_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "flow_type": {
+          "enum": [
+            "contribution",
+            "withdrawal",
+            "external_income",
+            "fee",
+            "tax",
+            "one_time_expense"
+          ]
+        },
+        "amount": {
+          "$ref": "#/$defs/nonnegativeAmount"
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "frequency": {
+          "enum": [
+            "once",
+            "monthly",
+            "quarterly",
+            "annually"
+          ]
+        },
+        "timing": {
+          "enum": [
+            "beginning_of_period",
+            "end_of_period"
+          ]
+        },
+        "inflation_adjusted": {
+          "type": "boolean",
+          "default": false
+        },
+        "account_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "rebalancing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy"],
+      "properties": {
+        "policy": {
+          "enum": [
+            "none",
+            "scheduled",
+            "threshold",
+            "glide_path"
+          ]
+        },
+        "frequency": {
+          "$ref": "#/$defs/frequency"
+        },
+        "threshold": {
+          "$ref": "#/$defs/weight"
+        },
+        "transaction_cost_rate": {
+          "$ref": "#/$defs/weight"
+        },
+        "glide_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["year", "target_weights"],
+            "properties": {
+              "year": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "target_weights": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "$ref": "#/$defs/weight"
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "policy": {
+                "const": "scheduled"
+              }
+            },
+            "required": ["policy"]
+          },
+          "then": {
+            "required": ["frequency"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "policy": {
+                "const": "threshold"
+              }
+            },
+            "required": ["policy"]
+          },
+          "then": {
+            "required": ["threshold"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "policy": {
+                "const": "glide_path"
+              }
+            },
+            "required": ["policy"]
+          },
+          "then": {
+            "required": ["glide_path"]
+          }
+        }
+      ]
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "goal_type",
+        "target_date"
+      ],
+      "properties": {
+        "goal_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "goal_type": {
+          "enum": [
+            "target_wealth",
+            "minimum_balance",
+            "avoid_depletion",
+            "withdrawal_sustainability"
+          ]
+        },
+        "target_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "target_amount": {
+          "$ref": "#/$defs/nonnegativeAmount"
+        },
+        "inflation_adjusted": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "goal_type": {
+                "enum": [
+                  "target_wealth",
+                  "minimum_balance"
+                ]
+              }
+            },
+            "required": ["goal_type"]
+          },
+          "then": {
+            "required": ["target_amount"]
+          }
+        }
+      ]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "scenario_type"
+      ],
+      "properties": {
+        "scenario_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "scenario_type": {
+          "enum": [
+            "baseline",
+            "optimistic",
+            "pessimistic",
+            "historical",
+            "stress",
+            "custom"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "historical_period_start": {
+          "type": "string",
+          "format": "date"
+        },
+        "historical_period_end": {
+          "type": "string",
+          "format": "date"
+        },
+        "asset_shocks": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/rate"
+          }
+        },
+        "inflation_shock": {
+          "type": "number",
+          "exclusiveMinimum": -1
+        },
+        "duration_periods": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recovery_periods": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scenario_weight": {
+          "$ref": "#/$defs/weight"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_version",
+        "assumption_sources",
+        "allow_model_fallback",
+        "allow_covariance_repair"
+      ],
+      "properties": {
+        "model_version": {
+          "$ref": "#/$defs/identifier"
+        },
+        "assumption_sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/provenance"
+          }
+        },
+        "user_overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field_path",
+              "reason"
+            ],
+            "properties": {
+              "field_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "previous_value": {},
+              "new_value": {}
+            }
+          }
+        },
+        "allow_model_fallback": {
+          "type": "boolean",
+          "const": false
+        },
+        "allow_covariance_repair": {
+          "type": "boolean",
+          "const": false
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,88 @@
+
+{
+  "schema_version": "monte_carlo.request.v1",
+  "request_id": "REQ-INVALID-CORR-001",
+  "as_of_date": "2026-11-17",
+  "base_currency": "USD",
+  "input_mode": "standalone",
+  "portfolio": {
+    "portfolio_id": "PORT-INVALID-CORR",
+    "assets": [
+      {
+        "asset_id": "A",
+        "asset_class": "equity",
+        "initial_value": 50000,
+        "target_weight": 0.5
+      },
+      {
+        "asset_id": "B",
+        "asset_class": "fixed_income",
+        "initial_value": 30000,
+        "target_weight": 0.3
+      },
+      {
+        "asset_id": "C",
+        "asset_class": "cash",
+        "initial_value": 20000,
+        "target_weight": 0.2
+      }
+    ],
+    "allow_borrowing": false
+  },
+  "market_assumptions": {
+    "return_convention": "arithmetic_simple",
+    "parameter_frequency": "annually",
+    "expected_returns": {
+      "A": 0.07,
+      "B": 0.04,
+      "C": 0.02
+    },
+    "volatilities": {
+      "A": 0.2,
+      "B": 0.1,
+      "C": 0.02
+    },
+    "correlation_matrix": [
+      [1, 0.9, 0.9],
+      [0.9, 1, -0.9],
+      [0.9, -0.9, 1]
+    ],
+    "inflation_rate": 0.025,
+    "inflation_frequency": "annually",
+    "provenance": {
+      "source_type": "reference_fixture",
+      "source_id": "INVALID-CORRELATION-V1"
+    }
+  },
+  "simulation": {
+    "model": "multivariate_normal",
+    "horizon_years": 10,
+    "time_step": "annually",
+    "number_of_paths": 1000,
+    "random_seed": 98765
+  },
+  "rebalancing": {
+    "policy": "none"
+  },
+  "goals": [
+    {
+      "goal_id": "GOAL-TEST",
+      "goal_type": "target_wealth",
+      "target_date": "2036-11-17",
+      "target_amount": 150000
+    }
+  ],
+  "scenarios": [],
+  "governance": {
+    "model_version": "1.0.0",
+    "assumption_sources": [
+      {
+        "source_type": "reference_fixture",
+        "source_id": "INVALID-CORRELATION-V1"
+      }
+    ],
+    "user_overrides": [],
+    "allow_model_fallback": false,
+    "allow_covariance_repair": false
+  }
+}

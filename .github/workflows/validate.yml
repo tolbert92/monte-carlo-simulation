@@ -44,7 +44,6 @@ jobs:
         run: |
           python - <<'PY'
           import numpy
-          import jsonschema
           from importlib.metadata import version
 
           assert numpy.__version__ == "2.2.6"
@@ -71,7 +70,9 @@ jobs:
               "examples/valid-baseline-result.json",
               "tests/test_contracts.py",
               "tests/test_return_engine.py",
+              "tests/test_portfolio_engine.py",
               "src/monte_carlo/return_engine.py",
+              "src/monte_carlo/portfolio_engine.py",
           ]
 
           missing = [
@@ -126,12 +127,14 @@ jobs:
         run: |
           python -m py_compile \
             src/monte_carlo/return_engine.py \
+            src/monte_carlo/portfolio_engine.py \
             tests/test_contracts.py \
-            tests/test_return_engine.py
+            tests/test_return_engine.py \
+            tests/test_portfolio_engine.py
 
           echo "Python syntax validation passed."
 
-      - name: Run all contract and numerical tests
+      - name: Run all 67 contract and numerical tests
         shell: bash
         run: |
           set -euo pipefail
@@ -141,17 +144,52 @@ jobs:
             -p "test_*.py" \
             -v 2>&1 | tee test-results.log
 
-          if ! grep -Eq "Ran 43 tests? in " test-results.log; then
-            echo "ERROR: Expected exactly 43 discovered tests."
-            exit 1
-          fi
+          python - <<'PY'
+          import re
+          from pathlib import Path
 
-          if ! grep -qx "OK" test-results.log; then
-            echo "ERROR: Test suite did not report OK."
-            exit 1
-          fi
+          output = Path(
+              "test-results.log"
+          ).read_text(encoding="utf-8")
 
-          echo "All 43 automated tests passed."
+          matches = re.findall(
+              r"^Ran (\d+) tests? in ",
+              output,
+              flags=re.MULTILINE,
+          )
+
+          if len(matches) != 1:
+              raise SystemExit(
+                  "ERROR: Could not identify exactly one "
+                  "unittest summary."
+              )
+
+          actual_count = int(matches[0])
+          expected_count = 67
+
+          print(
+              f"Discovered tests: {actual_count}"
+          )
+
+          if actual_count != expected_count:
+              raise SystemExit(
+                  f"ERROR: Expected {expected_count} tests, "
+                  f"but discovered {actual_count}."
+              )
+
+          if not re.search(
+              r"^OK\s*$",
+              output,
+              flags=re.MULTILINE,
+          ):
+              raise SystemExit(
+                  "ERROR: Test suite did not report OK."
+              )
+
+          print(
+              "All 67 automated tests passed."
+          )
+          PY
 
       - name: Write validation summary
         if: success()
@@ -159,37 +197,56 @@ jobs:
           {
             echo "## Skill #8 - Gate 2 Validation"
             echo ""
-            echo "**Status:** PASSED"
+            echo "**Status: PASSED**"
             echo ""
             echo "| Validation | Result |"
             echo "|---|---|"
             echo "| Python | 3.11 |"
             echo "| NumPy | 2.2.6 |"
             echo "| jsonschema | 4.23.0 |"
-            echo "| Required repository files | 11 verified |"
+            echo "| Required repository files | 13 verified |"
             echo "| JSON syntax | 6 files passed |"
-            echo "| Python syntax | 3 files passed |"
-            echo "| Gate 1 contract tests | 23 |"
-            echo "| Gate 2 numerical tests | 20 |"
-            echo "| **Total automated tests** | **43 passed** |"
+            echo "| Python syntax | 5 files passed |"
+            echo "| Gate 1 contract tests | 23 passed |"
+            echo "| Gate 2 return-engine tests | 20 passed |"
+            echo "| Gate 2 portfolio-engine tests | 24 passed |"
+            echo "| **Total automated tests** | **67 passed** |"
             echo ""
-            echo "### Scope"
+            echo "### Validated capabilities"
             echo ""
-            echo "Validated:"
             echo "- Versioned JSON contracts and fixtures"
-            echo "- Portfolio and correlation semantic checks"
+            echo "- Request and result semantic validation"
             echo "- Seeded return reproducibility"
             echo "- Correlated multivariate normal returns"
             echo "- Lognormal return conversion"
             echo "- Covariance and positive-semidefinite checks"
-            echo "- Deterministic reference return generation"
+            echo "- Deterministic return generation"
+            echo "- Multi-asset portfolio balance evolution"
+            echo "- Beginning- and end-of-period cash flows"
+            echo "- Contribution and withdrawal accounting"
+            echo "- Withdrawal shortfall tracking"
+            echo "- Periodic fee calculations"
+            echo "- Asset allocation drift without rebalancing"
+            echo "- Portfolio depletion and recovery"
+            echo "- Path-by-path accounting reconciliation"
             echo ""
-            echo "Not yet validated:"
-            echo "- Portfolio balance evolution"
-            echo "- Contributions, withdrawals, and rebalancing"
-            echo "- Full Monte Carlo financial risk reporting"
-            echo "- Additional return models"
+            echo "### Not yet validated"
+            echo ""
+            echo "- Intraperiod depletion event tracking"
+            echo "- Scheduled and threshold rebalancing"
+            echo "- Tax-aware account mechanics"
+            echo "- Inflation-adjusted cash flows"
+            echo "- Student's t and bootstrap return models"
+            echo "- Regime-switching simulations"
+            echo "- Full financial risk and goal reporting"
             echo "- Hosted professor acceptance testing"
+            echo ""
+            echo "### Acceptance boundary"
+            echo ""
+            echo "This workflow validates the current "
+            echo "contract, return-generation, and portfolio "
+            echo "accounting foundations. It does not approve "
+            echo "the complete Monte Carlo application."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload test log on failure

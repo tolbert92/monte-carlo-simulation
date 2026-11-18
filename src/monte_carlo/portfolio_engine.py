@@ -1,44 +1,55 @@
 
 """
 Skill #8 — Monte Carlo Simulation
-Gate 2, Stage 2.5: Portfolio Evolution Engine
+Gate 2, Stage 2.9: Portfolio Evolution Engine
 
-Evolves multi-asset portfolio balances across simulated paths.
+Adds intraperiod depletion tracking while preserving the
+Stage 2.5 portfolio accounting interface.
 
 Accounting conventions
 ----------------------
 1. Holdings are measured in nominal portfolio currency.
 2. Initial asset weights sum to one.
 3. Returns are arithmetic simple returns.
-4. Contributions and withdrawals are nonnegative amounts.
-5. Cash flows may occur at the beginning or end of a period.
-6. Withdrawals are capped at available portfolio wealth.
-7. Contributions use current holdings proportions, or initial
-   target weights when the portfolio is fully depleted.
+4. Contributions and withdrawals are nonnegative.
+5. Cash flows occur at the beginning or end of a period.
+6. Withdrawals cannot exceed available wealth.
+7. Contributions follow current asset proportions, or
+   initial target weights when holdings are zero.
 8. Withdrawals reduce holdings proportionally.
-9. A periodic fee is deducted after investment returns and
-   before end-of-period cash flows.
-10. No automatic rebalancing occurs; asset weights may drift.
-11. Depletion means wealth reaches zero during a period.
-    A later contribution can restore a positive balance.
-12. Asset returns below -100% are rejected.
-13. All balances and cash flows must remain finite.
+9. Periodic fees apply after investment returns.
+10. No automatic rebalancing is performed.
+11. A contribution can restore a depleted portfolio.
+12. Arithmetic returns below -100% are rejected.
+13. All input and output amounts must be finite.
 
-Excluded from this initial implementation:
-- Scheduled or threshold rebalancing
-- Transaction costs and taxes
-- Inflation indexing
-- Account-specific cash flow routing
-- Pension and Social Security scheduling
-- Return model generation
+Depletion conventions
+---------------------
+depletion_events:
+    True when closing portfolio wealth equals zero.
+
+intraperiod_depletion_events:
+    True when wealth reaches zero during the accounting
+    sequence before end-of-period contributions can restore
+    the portfolio.
+
+ever_depleted:
+    True if either event occurs in any period.
+
+For beginning-of-period cash flows, depletion is checked
+after withdrawals and after investment returns/fees.
+
+For end-of-period cash flows, depletion is checked after
+returns/fees and again at the closing balance.
+
+This module does not model continuous-time asset paths.
+Intraperiod refers to observable accounting checkpoints.
 
 Input return shape:
     (paths, periods, assets)
 
 Output balance shape:
     (paths, periods + 1, assets)
-
-The first balance observation is the initial portfolio.
 """
 
 from __future__ import annotations
@@ -66,7 +77,7 @@ def _fail(code: str, message: str) -> None:
 
 @dataclass(frozen=True)
 class PortfolioEvolutionConfig:
-    """Configuration for a single portfolio simulation run."""
+    """Configuration for a portfolio simulation run."""
 
     asset_ids: tuple[str, ...]
     initial_portfolio_value: float
@@ -78,7 +89,7 @@ class PortfolioEvolutionConfig:
 
 @dataclass(frozen=True)
 class PortfolioEvolutionResult:
-    """Portfolio balances and accounting observations."""
+    """Balances, cash flows, and accounting observations."""
 
     asset_ids: tuple[str, ...]
     asset_balances: np.ndarray
@@ -94,8 +105,12 @@ class PortfolioEvolutionResult:
     ever_depleted: np.ndarray
     accounting_residuals: np.ndarray
 
+    # New Stage 2.9 field, placed last for compatibility.
+    intraperiod_depletion_events: np.ndarray | None = None
+
     def to_metadata(self) -> dict[str, Any]:
         """Return JSON-compatible descriptive metadata."""
+
         paths, observations, assets = self.asset_balances.shape
 
         return {
@@ -107,6 +122,12 @@ class PortfolioEvolutionResult:
             "cash_flow_policy": "withdrawals_capped_at_available",
             "rebalancing": "none",
             "accounting_basis": "nominal",
+            "depletion_policy": (
+                "closing_and_intraperiod_accounting_checkpoints"
+            ),
+            "intraperiod_depletion_tracking": (
+                self.intraperiod_depletion_events is not None
+            ),
         }
 
 
@@ -114,7 +135,8 @@ def _numeric_array(
     values: Any,
     name: str,
 ) -> np.ndarray:
-    """Convert values to a finite float64 array."""
+    """Convert input to finite float64 values."""
+
     try:
         array = np.asarray(values, dtype=np.float64)
     except (TypeError, ValueError, OverflowError):
@@ -135,7 +157,7 @@ def _numeric_array(
 def validate_portfolio_config(
     config: PortfolioEvolutionConfig,
 ) -> None:
-    """Validate portfolio configuration before simulation."""
+    """Validate configuration before simulation."""
 
     if not isinstance(config, PortfolioEvolutionConfig):
         _fail(
@@ -236,15 +258,7 @@ def _cash_flow_array(
     periods: int,
     name: str,
 ) -> np.ndarray:
-    """
-    Accept a period schedule or a path-specific schedule.
-
-    Supported shapes:
-        (periods,)
-        (paths, periods)
-
-    No implicit annual/monthly conversion is performed.
-    """
+    """Normalize a cash-flow schedule to (paths, periods)."""
 
     if values is None:
         return np.zeros((paths, periods), dtype=np.float64)
@@ -281,16 +295,11 @@ def _allocate_contributions(
     amounts: np.ndarray,
     initial_weights: np.ndarray,
 ) -> np.ndarray:
-    """
-    Allocate contributions using current portfolio proportions.
-
-    For zero-balance portfolios, use initial target weights.
-    """
+    """Allocate contributions proportionally to asset holdings."""
 
     wealth = holdings.sum(axis=1)
 
     proportions = np.empty_like(holdings)
-
     positive = wealth > 0
 
     if np.any(positive):
@@ -309,13 +318,7 @@ def _apply_withdrawals(
     holdings: np.ndarray,
     requested: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Withdraw proportionally without allowing negative holdings.
-
-    Returns:
-        updated holdings
-        actual fulfilled withdrawal
-    """
+    """Fulfill withdrawals without creating negative holdings."""
 
     available = holdings.sum(axis=1)
     actual = np.minimum(requested, available)
@@ -330,8 +333,6 @@ def _apply_withdrawals(
         )
 
     updated = holdings - actual[:, None] * proportions
-
-    # Remove only negligible floating-point negatives.
     updated = np.maximum(updated, 0.0)
 
     return updated, actual
@@ -346,39 +347,15 @@ def evolve_portfolio(
     """
     Evolve holdings across Monte Carlo paths and periods.
 
-    Parameters
-    ----------
-    simple_returns:
-        Array shaped (paths, periods, assets).
-        Each value must be >= -1.
+    Returns have shape (paths, periods, assets).
 
-    config:
-        PortfolioEvolutionConfig.
-
-    contributions:
-        Optional nonnegative schedule shaped (periods,)
-        or (paths, periods).
-
-    withdrawals:
-        Optional nonnegative schedule shaped (periods,)
-        or (paths, periods).
-
-    Returns
-    -------
-    PortfolioEvolutionResult
-
-    Cash flow sequence
-    ------------------
-    Beginning-of-period:
+    Beginning-of-period sequence:
         contribution -> withdrawal -> returns -> fee
 
-    End-of-period:
+    End-of-period sequence:
         returns -> fee -> contribution -> withdrawal
 
-    Investment gains are measured from the holdings
-    immediately before returns are applied.
-
-    Accounting identity for each period:
+    Accounting identity:
         ending wealth
         = starting wealth
         + actual contributions
@@ -386,8 +363,8 @@ def evolve_portfolio(
         + investment gains
         - fees
 
-    Requested but unfulfilled withdrawals are recorded
-    separately and do not reduce portfolio balances.
+    Depletion observations are made at discrete accounting
+    checkpoints, not at unobserved times between returns.
     """
 
     validate_portfolio_config(config)
@@ -477,6 +454,12 @@ def evolve_portfolio(
         dtype=bool,
     )
 
+    # New: captures depletion before closing cash flows.
+    intraperiod_depletion_events = np.zeros(
+        (paths, periods),
+        dtype=bool,
+    )
+
     accounting_residuals = np.zeros(
         (paths, periods),
         dtype=np.float64,
@@ -488,7 +471,6 @@ def evolve_portfolio(
 
     for period in range(periods):
         holdings = balances[:, period, :].copy()
-
         starting_wealth = holdings.sum(axis=1)
 
         requested_contribution = (
@@ -497,6 +479,13 @@ def evolve_portfolio(
 
         requested_withdrawal = (
             withdrawal_schedule[:, period]
+        )
+
+        # Record whether wealth reaches zero at any
+        # observable checkpoint before period close.
+        depleted_during_period = np.zeros(
+            paths,
+            dtype=bool,
         )
 
         if beginning:
@@ -517,6 +506,11 @@ def evolve_portfolio(
 
             actual_withdrawals[:, period] = fulfilled
 
+            # Checkpoint: after beginning-period withdrawal.
+            depleted_during_period |= (
+                holdings.sum(axis=1) <= 0
+            )
+
         pre_return_wealth = holdings.sum(axis=1)
 
         holdings_after_returns = (
@@ -529,7 +523,6 @@ def evolve_portfolio(
         )
 
         investment_gains[:, period] = gains
-
         holdings = holdings_after_returns
 
         fee_amounts = (
@@ -542,6 +535,12 @@ def evolve_portfolio(
         )
 
         fees_paid[:, period] = fee_amounts
+
+        # Checkpoint: after investment returns and fees.
+        # This occurs before end-period contributions.
+        depleted_during_period |= (
+            holdings.sum(axis=1) <= 0
+        )
 
         if not beginning:
             holdings = _allocate_contributions(
@@ -574,7 +573,6 @@ def evolve_portfolio(
             )
 
         holdings = np.maximum(holdings, 0.0)
-
         ending_wealth = holdings.sum(axis=1)
 
         expected_ending_wealth = (
@@ -610,8 +608,14 @@ def evolve_portfolio(
 
         balances[:, period + 1, :] = holdings
 
+        # Preserve original end-of-period depletion semantics.
         depletion_events[:, period] = (
             ending_wealth <= 0
+        )
+
+        # New: record exhaustion before the period closes.
+        intraperiod_depletion_events[:, period] = (
+            depleted_during_period
         )
 
     portfolio_balances = balances.sum(axis=2)
@@ -620,8 +624,9 @@ def evolve_portfolio(
         withdrawal_schedule - actual_withdrawals
     )
 
+    # New: include both closing and intraperiod depletion.
     ever_depleted = np.any(
-        depletion_events,
+        depletion_events | intraperiod_depletion_events,
         axis=1,
     )
 
@@ -639,4 +644,7 @@ def evolve_portfolio(
         depletion_events=depletion_events,
         ever_depleted=ever_depleted,
         accounting_residuals=accounting_residuals,
+        intraperiod_depletion_events=(
+            intraperiod_depletion_events
+        ),
     )

@@ -1,0 +1,136 @@
+
+{
+  "schema_version": "monte_carlo.request.v1",
+  "request_id": "REQ-BASELINE-001",
+  "as_of_date": "2026-11-17",
+  "base_currency": "USD",
+  "input_mode": "standalone",
+  "portfolio": {
+    "portfolio_id": "PORT-BASELINE-001",
+    "portfolio_name": "Illustrative Balanced Portfolio",
+    "assets": [
+      {
+        "asset_id": "EQUITY",
+        "asset_class": "equity",
+        "initial_value": 60000,
+        "target_weight": 0.6,
+        "account_type": "taxable"
+      },
+      {
+        "asset_id": "BONDS",
+        "asset_class": "fixed_income",
+        "initial_value": 30000,
+        "target_weight": 0.3,
+        "account_type": "taxable"
+      },
+      {
+        "asset_id": "CASH",
+        "asset_class": "cash",
+        "initial_value": 10000,
+        "target_weight": 0.1,
+        "account_type": "taxable"
+      }
+    ],
+    "allow_borrowing": false
+  },
+  "market_assumptions": {
+    "return_convention": "arithmetic_simple",
+    "parameter_frequency": "annually",
+    "expected_returns": {
+      "EQUITY": 0.07,
+      "BONDS": 0.035,
+      "CASH": 0.02
+    },
+    "volatilities": {
+      "EQUITY": 0.16,
+      "BONDS": 0.06,
+      "CASH": 0.005
+    },
+    "correlation_matrix": [
+      [1, 0.2, 0],
+      [0.2, 1, 0.1],
+      [0, 0.1, 1]
+    ],
+    "inflation_rate": 0.025,
+    "inflation_frequency": "annually",
+    "provenance": {
+      "source_type": "reference_fixture",
+      "source_id": "BASELINE-ASSUMPTIONS-V1",
+      "notes": "Hypothetical assumptions for academic testing."
+    }
+  },
+  "simulation": {
+    "model": "multivariate_normal",
+    "horizon_years": 20,
+    "time_step": "annually",
+    "number_of_paths": 10000,
+    "random_seed": 59108,
+    "output_options": {
+      "include_percentile_paths": true,
+      "include_sample_paths": false,
+      "maximum_export_paths": 0
+    },
+    "resource_limits": {
+      "maximum_runtime_seconds": 120,
+      "maximum_memory_mb": 512
+    }
+  },
+  "cash_flows": [
+    {
+      "cash_flow_id": "ANNUAL-CONTRIBUTION",
+      "flow_type": "contribution",
+      "amount": 6000,
+      "start_date": "2027-11-17",
+      "end_date": "2046-11-17",
+      "frequency": "annually",
+      "timing": "end_of_period",
+      "inflation_adjusted": false
+    }
+  ],
+  "rebalancing": {
+    "policy": "scheduled",
+    "frequency": "annually",
+    "transaction_cost_rate": 0.001
+  },
+  "goals": [
+    {
+      "goal_id": "GOAL-500K",
+      "goal_type": "target_wealth",
+      "target_date": "2046-11-17",
+      "target_amount": 500000,
+      "inflation_adjusted": false
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario_id": "BASELINE",
+      "scenario_type": "baseline",
+      "description": "Baseline assumptions with no additional stress shocks."
+    },
+    {
+      "scenario_id": "EQUITY-STRESS",
+      "scenario_type": "stress",
+      "description": "Illustrative 30 percent equity decline.",
+      "asset_shocks": {
+        "EQUITY": -0.3,
+        "BONDS": -0.05,
+        "CASH": 0
+      },
+      "duration_periods": 1,
+      "recovery_periods": 3
+    }
+  ],
+  "governance": {
+    "model_version": "1.0.0",
+    "assumption_sources": [
+      {
+        "source_type": "reference_fixture",
+        "source_id": "BASELINE-ASSUMPTIONS-V1"
+      }
+    ],
+    "user_overrides": [],
+    "allow_model_fallback": false,
+    "allow_covariance_repair": false,
+    "notes": "Illustrative assumptions; not calibrated market forecasts."
+  }
+}
